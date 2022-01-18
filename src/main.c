@@ -8,6 +8,22 @@
 
 #define DS_BIN "SIDedicatedServer.x86_64"
 
+static int32_t ds_pid = 0;
+
+void sigint_handler(int32_t signum)
+{
+    printf("Got SIGINT (=%i)\n", signum);
+    if (signum == SIGINT)
+    {
+        if (ds_pid > 0)
+        {
+            kill(ds_pid, SIGINT);
+            printf("Waiting for DS to quit...\n");
+            waitpid(ds_pid, NULL, WUNTRACED);
+        }
+    }
+}
+
 int32_t ds_run()
 {
     char *const ds_name = "./" DS_BIN;
@@ -24,8 +40,8 @@ int32_t ds_run()
         return ret;
     }
 
-    int32_t pid = fork();
-    if (pid == -1)
+    ds_pid = fork();
+    if (ds_pid <= -1)
     {
         // Cleanup pipe.
         close(fd[0u]);
@@ -35,7 +51,7 @@ int32_t ds_run()
         return ret;
     }
 
-    if (pid == 0u)
+    if (ds_pid == 0u)
     {
         // Child.
 
@@ -100,23 +116,23 @@ int32_t ds_run()
         }
 
         // Kill child to avoid zombie servers.
-        kill(pid, SIGINT);
+        kill(ds_pid, SIGINT);
 
         // Cleanup FDs.
         close(fd[0u]);
 
-        // TODO: Properly check if child stopped.
-        sleep(5u);
         // Just to be sure child has shutdown.
-        kill(pid, SIGKILL);
+        waitpid(ds_pid, NULL, WUNTRACED);
     }
     return ret;
 }
 
 int32_t main()
 {
+    signal(SIGINT, sigint_handler);
     while (1u)
     {
+        ds_pid = 0; // Reset DS PID
         if (ds_run() != EXIT_SUCCESS)
         {
             break;
