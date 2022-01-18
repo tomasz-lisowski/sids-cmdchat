@@ -87,17 +87,20 @@ cmdchat_et cmdchat_parse_raw(char *buffer, const uint32_t buffer_len)
     bool cmdchat_found = false;
     uint32_t cmdchat_start_idx = 0u;
 
-    for (uint32_t buf_idx = 0u; buf_idx < (buffer_len - cmdchat_prefix_len);
-         ++buf_idx)
+    if (buffer_len >= cmdchat_prefix_len)
     {
-        if (buffer[buf_idx] == '[')
+        for (uint32_t buf_idx = 0u; buf_idx < (buffer_len - cmdchat_prefix_len);
+             ++buf_idx)
         {
-            if (memcmp(&buffer[buf_idx], cmdchat_prefix, cmdchat_prefix_len) ==
-                0u)
+            if (buffer[buf_idx] == '[')
             {
-                cmdchat_found = true;
-                cmdchat_start_idx = buf_idx;
-                break;
+                if (memcmp(&buffer[buf_idx], cmdchat_prefix,
+                           cmdchat_prefix_len) == 0u)
+                {
+                    cmdchat_found = true;
+                    cmdchat_start_idx = buf_idx;
+                    break;
+                }
             }
         }
     }
