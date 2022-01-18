@@ -14,13 +14,14 @@ int32_t ds_run()
     char *const ds_argv[] = {DS_BIN,     "-config",    "serverconfig.txt",
                              "-console", "-batchmode", "-nographics",
                              "-logFile", NULL};
+    int32_t ret = EXIT_FAILURE;
 
     // Pipe for getting STDOUT of DS in parent.
     int32_t fd[2u] = {0u};
     if (pipe(fd))
     {
         perror("pipe");
-        return EXIT_FAILURE;
+        return ret;
     }
 
     int32_t pid = fork();
@@ -31,7 +32,7 @@ int32_t ds_run()
         close(fd[1u]);
 
         perror("fork");
-        return EXIT_FAILURE;
+        return ret;
     }
 
     if (pid == 0u)
@@ -49,7 +50,7 @@ int32_t ds_run()
         if (execv(ds_name, ds_argv) == -1)
         {
             perror("execv");
-            return EXIT_FAILURE;
+            return ret;
         }
     }
     else
@@ -74,6 +75,8 @@ int32_t ds_run()
             {
                 // DS probably crashed.
                 printf("got EOF\n");
+                running = false;
+                ret = EXIT_FAILURE;
                 break;
             }
             else
@@ -88,6 +91,7 @@ int32_t ds_run()
                 {
                 case CMDCHAT_RESTART:
                     running = false;
+                    ret = EXIT_SUCCESS;
                     break;
                 case CMDCHAT_UNKNOWN:
                     break;
@@ -106,14 +110,17 @@ int32_t ds_run()
         // Just to be sure child has shutdown.
         kill(pid, SIGKILL);
     }
-    return EXIT_SUCCESS;
+    return ret;
 }
 
 int32_t main()
 {
     while (1u)
     {
-        ds_run();
+        if (ds_run() != EXIT_SUCCESS)
+        {
+            break;
+        };
     }
     return EXIT_SUCCESS;
 }
