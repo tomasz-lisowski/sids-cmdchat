@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #define DS_BIN "SIDedicatedServer.x86_64"
+#define DS_PATH_SCRIPT "./script"
 
 static int32_t ds_pid = 0;
 
@@ -18,8 +19,10 @@ void sigint_handler(int32_t signum)
         if (ds_pid > 0)
         {
             kill(ds_pid, SIGINT);
-            printf("Waiting for DS to quit...\n");
+            printf("Waiting for DS to quit\n");
             waitpid(ds_pid, NULL, WUNTRACED);
+            printf("DS has quit\n");
+            exit(EXIT_SUCCESS);
         }
     }
 }
@@ -90,14 +93,14 @@ int32_t ds_run()
             else if (bytes_read == 0u)
             {
                 // DS probably crashed.
-                printf("got EOF\n");
+                printf("Got EOF from STDOUT of DS\n");
                 running = false;
                 ret = EXIT_FAILURE;
                 break;
             }
             else
             {
-                printf("cmdchat (%4u): %.*s\n", (uint32_t)bytes_read,
+                printf("CMDChat (%4u): %.*s\n", (uint32_t)bytes_read,
                        (uint32_t)bytes_read, buffer);
                 /* Safe cast to uint32_t due to length arg passed to read. */
                 cmdchat_et cmd =
@@ -108,6 +111,11 @@ int32_t ds_run()
                 case CMDCHAT_RESTART:
                     running = false;
                     ret = EXIT_SUCCESS;
+                    break;
+                case CMDCHAT_BACKUP:
+                    system("/bin/bash"
+                           " " DS_PATH_SCRIPT "/"
+                           "sids-backup.sh");
                     break;
                 case CMDCHAT_UNKNOWN:
                     break;

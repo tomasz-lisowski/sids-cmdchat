@@ -6,6 +6,7 @@
 typedef enum cmdchat_e
 {
     CMDCHAT_RESTART,
+    CMDCHAT_BACKUP,
     CMDCHAT_UNKNOWN,
 } cmdchat_et;
 
