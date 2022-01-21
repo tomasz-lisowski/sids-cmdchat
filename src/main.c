@@ -1,13 +1,17 @@
 #include "cmdchat.h"
+#include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/select.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #define DS_BIN "SIDedicatedServer.x86_64"
 #define DS_PATH_SCRIPT "./script"
+#define DS_CHAT_PREFIX "[CHAT]server(999): "
 
 static int32_t ds_pid = 0;
 
@@ -62,9 +66,13 @@ int32_t ds_run()
         close(fd[0u]);
 
         // Make fd[1] the STDOUT and STDERR of child.
-        dup2(fd[1u], STDOUT_FILENO);
-        dup2(fd[1u], STDERR_FILENO);
-        close(fd[1u]);
+        if (dup2(fd[1u], STDOUT_FILENO) != STDOUT_FILENO ||
+            dup2(fd[1u], STDERR_FILENO) != STDERR_FILENO)
+        {
+            perror("dup2");
+            close(fd[1u]);
+            return ret;
+        }
 
         if (execv(ds_name, ds_argv) == -1)
         {
@@ -75,16 +83,51 @@ int32_t ds_run()
     else
     {
         // Parent.
+        bool running = true;
+
+        // Allow for commands to come from STDIN of parent using select.
+        fd_set read_fds, read_fds_cpy;
+        FD_ZERO(&read_fds);
+        FD_CLR(0u, &read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+        FD_CLR(fd[0u], &read_fds);
+        FD_SET(fd[0u], &read_fds);
 
         // Close the end of pipe owned by child.
         close(fd[1u]);
 
         char buffer[2048u];
-        bool running = true;
         while (running)
         {
-            // Read from STDOUT of child.
-            const ssize_t bytes_read = read(fd[0u], buffer, sizeof(buffer));
+            // Copy the initialized fd set to avoid re-runing the macros.
+            read_fds_cpy = read_fds;
+            if (select(1 + (fd[0u] > STDIN_FILENO ? fd[0u] : STDIN_FILENO),
+                       &read_fds_cpy, NULL, NULL, NULL) == -1)
+            {
+                perror("select");
+                running = false;
+                break;
+            }
+
+            ssize_t bytes_read;
+            if (FD_ISSET(STDIN_FILENO, &read_fds_cpy))
+            {
+                // Read from STDIN of parent.
+                memcpy(&buffer[0], DS_CHAT_PREFIX, sizeof(DS_CHAT_PREFIX) - 1u);
+                bytes_read =
+                    read(STDIN_FILENO, &buffer[sizeof(DS_CHAT_PREFIX) - 1],
+                         sizeof(buffer));
+                if (bytes_read > 0u)
+                {
+                    bytes_read += (uint32_t)sizeof(DS_CHAT_PREFIX) - 1u;
+                }
+            }
+            else if (FD_ISSET(fd[0u], &read_fds_cpy))
+            {
+                // Read from STDOUT of child.
+                bytes_read = read(fd[0u], buffer, sizeof(buffer));
+            }
+
             if (bytes_read < 0u)
             {
                 perror("read");
@@ -128,6 +171,7 @@ int32_t ds_run()
 
         // Cleanup FDs.
         close(fd[0u]);
+        close(fd[1u]);
 
         // Just to be sure child has shutdown.
         waitpid(ds_pid, NULL, WUNTRACED);
